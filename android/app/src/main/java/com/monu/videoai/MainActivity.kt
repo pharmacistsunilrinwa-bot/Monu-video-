@@ -277,10 +277,20 @@ class MainActivity : Activity() {
             connection.disconnect()
 
             if (code in 200..299) {
-                val uploadedName = Regex(""filename"\\s*:\\s*"([^"]+)"")
-                    .find(response)
-                    ?.groupValues
-                    ?.getOrNull(1)
+                val marker = "\"filename\""
+                val markerIndex = response.indexOf(marker)
+                val uploadedName = if (markerIndex >= 0) {
+                    val colon = response.indexOf(":", markerIndex)
+                    val firstQuote = response.indexOf('"', colon + 1)
+                    val secondQuote = response.indexOf('"', firstQuote + 1)
+                    if (firstQuote >= 0 && secondQuote > firstQuote) {
+                        response.substring(firstQuote + 1, secondQuote)
+                    } else {
+                        null
+                    }
+                } else {
+                    null
+                }
 
                 runOnUiThread {
                     addMessage("Monu", "✅ File uploaded: $name")
