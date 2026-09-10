@@ -93,7 +93,7 @@ class MainActivity : Activity() {
         val menu = TextView(this).apply {
             text = "⋮"
             textSize = 30f
-            setTextColor(android.graphics.Color.parseColor(text))
+            setTextColor(android.graphics.Color.parseColor(text.toString()))
             gravity = Gravity.CENTER
             setPadding(12, 0, 8, 0)
             isClickable = true
@@ -171,7 +171,7 @@ class MainActivity : Activity() {
         input = EditText(this).apply {
             hint = "Message MONU..."
             textSize = 16f
-            setTextColor(android.graphics.Color.parseColor(text))
+            setTextColor(android.graphics.Color.parseColor(text.toString()))
             setHintTextColor(muted)
             maxLines = 4
             setPadding(16, 12, 16, 12)
@@ -258,7 +258,7 @@ class MainActivity : Activity() {
         val bubble = TextView(this).apply {
             text = "$who\n$message"
             textSize = 15f
-            setTextColor(android.graphics.Color.parseColor(text))
+            setTextColor(android.graphics.Color.parseColor(text.toString()))
             setPadding(16, 12, 16, 12)
             background = rounded(
                 if (who == "Monu") panel2 else purpleDark,
@@ -645,7 +645,7 @@ class MainActivity : Activity() {
             }
             startActivityForResult(intent, 1002)
         } catch (e: Exception) {
-            showMessage("MONU: Voice input unavailable: ${e.message}")
+            Toast.makeText(this, "MONU: Voice input unavailable: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
