@@ -1,0 +1,44 @@
+.env
+.env.*
+__pycache__/
+*.pyc
+.gradle/
+build/
+.idea/
+*.iml
+server/data/uploads/*
+server/data/chunks/*
+server/data/processed/*
+server/data/final/*
+server/logs/*
+
+# Android local build output
+android/.gradle/
+android/build/
+android/app/build/
+
+# Local machine / IDE
+android/.idea/
+*.iml
+
+# Local secrets
+.env
+*.env
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Local video processing output
+server/data/uploads/*
+server/data/chunks/*
+server/data/processed/*
+server/data/final/*
+server/data/test/*
+
+# Keep directory documentation
+!server/data/uploads/.gitkeep
+!server/data/chunks/.gitkeep
+!server/data/processed/.gitkeep
+!server/data/final/.gitkeep
+!server/data/test/.gitkeep

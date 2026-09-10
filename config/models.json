@@ -1,0 +1,47 @@
+{
+  "default": "gemini-3.1-flash-lite",
+  "models": [
+    {
+      "id": "gemini-3.1-pro-preview",
+      "provider": "google",
+      "enabled": true,
+      "role": "reasoning"
+    },
+    {
+      "id": "gemini-3-flash-preview",
+      "provider": "google",
+      "enabled": true,
+      "role": "fast_reasoning"
+    },
+    {
+      "id": "gemini-2.5-pro",
+      "provider": "google",
+      "enabled": true,
+      "role": "reasoning"
+    },
+    {
+      "id": "gemini-3.1-flash-lite",
+      "provider": "google",
+      "enabled": true,
+      "role": "default"
+    },
+    {
+      "id": "gemini-3.5-flash",
+      "provider": "google",
+      "enabled": true,
+      "role": "fast_reasoning"
+    },
+    {
+      "id": "gemma-4-31b-it",
+      "provider": "google",
+      "enabled": true,
+      "role": "local_or_api_reasoning"
+    },
+    {
+      "id": "gemma-4-26b-a4b-it",
+      "provider": "google",
+      "enabled": true,
+      "role": "fast_local_or_api_reasoning"
+    }
+  ]
+}

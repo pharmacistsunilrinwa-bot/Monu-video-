@@ -1,0 +1,47 @@
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+from app.brain.monu_brain import MonuBrain
+from app.database.db import initialize
+
+app = FastAPI(
+    title="Monu Video AI",
+    version="1.0.0"
+)
+
+brain = MonuBrain()
+
+initialize()
+
+
+class ChatRequest(BaseModel):
+    message: str
+    model: str | None = None
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "assistant": "Monu",
+        "owner": "Sunil Rinwa"
+    }
+
+
+@app.get("/models")
+def models():
+    return brain.available_models()
+
+
+@app.post("/chat/analyze")
+def analyze(request: ChatRequest):
+    return brain.analyze_request(
+        request.message,
+        request.model
+    )
