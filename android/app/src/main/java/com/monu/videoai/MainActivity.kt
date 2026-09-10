@@ -68,14 +68,14 @@ class MainActivity : Activity() {
         val title = TextView(this).apply {
             text = "MONU"
             textSize = 25f
-            setTextColor(android.graphics.Color.parseColor(purple))
+            setTextColor(purple)
             setTypeface(null, android.graphics.Typeface.BOLD)
         }
 
         val subtitle = TextView(this).apply {
             text = "Video AI • Master Command Center"
             textSize = 12f
-            setTextColor(android.graphics.Color.parseColor(muted))
+            setTextColor(muted)
         }
 
         titleBox.addView(title)
@@ -84,7 +84,7 @@ class MainActivity : Activity() {
         val connection = TextView(this).apply {
             text = "● READY"
             textSize = 12f
-            setTextColor(android.graphics.Color.parseColor(green))
+            setTextColor(green)
             gravity = Gravity.CENTER
             setPadding(12, 8, 12, 8)
             background = rounded(panel2, 14)
@@ -93,7 +93,7 @@ class MainActivity : Activity() {
         val menu = TextView(this).apply {
             text = "⋮"
             textSize = 30f
-            setTextColor(android.graphics.Color.parseColor(text.toString()))
+            setTextColor(text)
             gravity = Gravity.CENTER
             setPadding(12, 0, 8, 0)
             isClickable = true
@@ -107,7 +107,7 @@ class MainActivity : Activity() {
         serverLabel = TextView(this).apply {
             text = "Server: $serverUrl"
             textSize = 12f
-            setTextColor(android.graphics.Color.parseColor(muted))
+            setTextColor(muted)
             setPadding(18, 8, 18, 8)
             setBackgroundColor(panel)
         }
@@ -143,7 +143,7 @@ class MainActivity : Activity() {
         val selected = TextView(this).apply {
             text = ""
             textSize = 12f
-            setTextColor(android.graphics.Color.parseColor(green))
+            setTextColor(green)
             setPadding(6, 4, 6, 4)
             visibility = View.GONE
         }
@@ -151,7 +151,7 @@ class MainActivity : Activity() {
         selectedLabel = TextView(this).apply {
             text = "No media selected"
             textSize = 12f
-            setTextColor(android.graphics.Color.parseColor(muted))
+            setTextColor(muted)
             setPadding(8, 5, 8, 5)
         }
 
@@ -171,7 +171,7 @@ class MainActivity : Activity() {
         input = EditText(this).apply {
             hint = "Message MONU..."
             textSize = 16f
-            setTextColor(android.graphics.Color.parseColor(text.toString()))
+            setTextColor(text)
             setHintTextColor(muted)
             maxLines = 4
             setPadding(16, 12, 16, 12)
@@ -211,7 +211,7 @@ class MainActivity : Activity() {
         status = TextView(this).apply {
             text = "MONU is ready"
             textSize = 12f
-            setTextColor(android.graphics.Color.parseColor(muted))
+            setTextColor(muted)
             setPadding(6, 7, 6, 0)
         }
 
@@ -258,7 +258,7 @@ class MainActivity : Activity() {
         val bubble = TextView(this).apply {
             text = "$who\n$message"
             textSize = 15f
-            setTextColor(android.graphics.Color.parseColor(text.toString()))
+            setTextColor(text)
             setPadding(16, 12, 16, 12)
             background = rounded(
                 if (who == "Monu") panel2 else purpleDark,
@@ -372,8 +372,9 @@ class MainActivity : Activity() {
 
     private fun sendMessage() {
         val message = input.text.toString().trim()
+        val file = selectedFile
 
-        if (message.isEmpty() && selectedFile == null) {
+        if (message.isEmpty() && file == null) {
             status.text = "Type a command or attach a file"
             return
         }
@@ -395,7 +396,6 @@ class MainActivity : Activity() {
         addMessage("You", shown)
         saveHistory(shown)
 
-        val file = selectedFile
         input.setText("")
         selectedFile = null
 
