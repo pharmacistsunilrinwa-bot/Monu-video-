@@ -8,6 +8,8 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from app.brain.monu_brain import MonuBrain
+from app.api.process import router as process_router
+
 from app.database.db import initialize
 
 app = FastAPI(
@@ -45,3 +47,5 @@ def analyze(request: ChatRequest):
         request.message,
         request.model
     )
+
+app.include_router(process_router)
