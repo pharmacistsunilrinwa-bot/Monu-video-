@@ -630,6 +630,26 @@ class MainActivity : Activity() {
     }
 
 
+    private fun startVoice() {
+        try {
+            val intent = android.content.Intent(
+                android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH
+            ).apply {
+                putExtra(
+                    android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                )
+                putExtra(
+                    android.speech.RecognizerIntent.EXTRA_PROMPT,
+                    "Speak to MONU"
+                )
+            }
+            startActivityForResult(intent, 1002)
+        } catch (e: Exception) {
+            appendChat("MONU: Voice input unavailable: ${e.message}")
+        }
+    }
+
     override fun onActivityResult(
         requestCode: Int,
         resultCode: Int,
