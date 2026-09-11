@@ -33,10 +33,7 @@ class MainActivity : Activity() {
 
     private var selectedFile: Uri? = null
     private var cameraUri: Uri? = null
-    private var serverUrl = prefs.getString(
-        "server_url",
-        "http://127.0.0.1:8000"
-    ) ?: "http://127.0.0.1:8000"
+    private var serverUrl = "http://127.0.0.1:8000"
 
     private val bg = Color.rgb(9, 10, 18)
     private val panel = Color.rgb(18, 20, 31)
@@ -49,6 +46,11 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        serverUrl = prefs.getString(
+            "server_url",
+            "http://127.0.0.1:8000"
+        ) ?: "http://127.0.0.1:8000"
 
         loadHistory()
         buildUi()
