@@ -167,8 +167,9 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
         }
 
-        val attach = actionButton("＋", purple) {
-            showMediaMenu(attach)
+        var attach: TextView? = null
+        attach = actionButton("＋", purple) {
+            showMediaMenu(attach!!)
         }
 
         val voice = actionButton("🎙", green) {
@@ -190,7 +191,7 @@ class MainActivity : Activity() {
         }
 
         commandRow.addView(
-            attach,
+            attach!!,
             LinearLayout.LayoutParams(54, 54).apply {
                 marginEnd = 7
             }
@@ -663,7 +664,7 @@ class MainActivity : Activity() {
                     return@Thread
                 }
 
-                val outputName = Path(outputPath).fileName.toString()
+                val outputName = java.io.File(outputPath).name
 
                 if (outputName.isBlank()) {
                     runOnUiThread {
@@ -1071,6 +1072,7 @@ class MainActivity : Activity() {
             return
         }
 
+      }
     private fun getFileName(uri: Uri): String {
         var name: String? = null
 
