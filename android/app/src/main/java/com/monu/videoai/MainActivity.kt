@@ -33,7 +33,10 @@ class MainActivity : Activity() {
 
     private var selectedFile: Uri? = null
     private var cameraUri: Uri? = null
-    private var serverUrl = "http://127.0.0.1:8000"
+    private var serverUrl = prefs.getString(
+        "server_url",
+        "http://127.0.0.1:8000"
+    ) ?: "http://127.0.0.1:8000"
 
     private val bg = Color.rgb(9, 10, 18)
     private val panel = Color.rgb(18, 20, 31)
@@ -590,56 +593,291 @@ class MainActivity : Activity() {
     }
 
     private fun processMedia(filename: String, message: String) {
-        try {
-            runOnUiThread {
-                status.text = "MONU is processing media..."
+        Thread {
+            var connection: HttpURLConnection? = null
+
+            try {
+                runOnUiThread {
+                    status.text = "MONU is processing video..."
+                }
+
+                connection =
+                    URL("$serverUrl/media/process").openConnection()
+                        as HttpURLConnection
+
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.connectTimeout = 15000
+                connection.readTimeout = 300000
+                connection.setRequestProperty(
+                    "Content-Type",
+                    "application/json"
+                )
+
+                val body =
+                    "{\"filename\":${jsonEscape(filename)},\"message\":${jsonEscape(message)}}"
+
+                connection.outputStream.use {
+                    it.write(body.toByteArray(Charsets.UTF_8))
+                }
+
+                val code = connection.responseCode
+
+                val response =
+                    if (code in 200..299) {
+                        connection.inputStream
+                            .bufferedReader()
+                            .use { it.readText() }
+                    } else {
+                        connection.errorStream
+                            ?.bufferedReader()
+                            ?.use { it.readText() }
+                            ?: "HTTP $code"
+                    }
+
+                if (code !in 200..299) {
+                    runOnUiThread {
+                        addMessage(
+                            "Monu",
+                            "❌ Video processing failed\n$response"
+                        )
+                        status.text = "Processing failed"
+                    }
+                    return@Thread
+                }
+
+                val json = JSONObject(response)
+
+                val ok = json.optBoolean("ok", false)
+                val outputPath = json.optString("output", "")
+                val jobId = json.optString("job_id", "")
+
+                if (!ok || outputPath.isBlank()) {
+                    runOnUiThread {
+                        addMessage(
+                            "Monu",
+                            "❌ Server did not return a verified cartoon video.\n$response"
+                        )
+                        status.text = "No verified output"
+                    }
+                    return@Thread
+                }
+
+                val outputName = Path(outputPath).fileName.toString()
+
+                if (outputName.isBlank()) {
+                    runOnUiThread {
+                        status.text = "Invalid processed filename"
+                    }
+                    return@Thread
+                }
+
+                runOnUiThread {
+                    status.text = "Cartoon video verified — downloading..."
+                }
+
+                val savedUri = downloadProcessedVideo(
+                    outputName,
+                    jobId
+                )
+
+                if (savedUri == null) {
+                    runOnUiThread {
+                        addMessage(
+                            "Monu",
+                            "⚠️ Cartoon video was created on the server, but the real video download failed.\nOutput: $outputName"
+                        )
+                        status.text = "Cartoon created — download failed"
+                    }
+                    return@Thread
+                }
+
+                runOnUiThread {
+                    addDownloadMessage(
+                        "🎬 Cartoon video ready",
+                        savedUri,
+                        outputName
+                    )
+                    status.text = "Cartoon video downloaded successfully"
+                }
+
+            } catch (e: Exception) {
+                runOnUiThread {
+                    addMessage(
+                        "Monu",
+                        "❌ Processing/download error: ${e.message ?: "failed"}"
+                    )
+                    status.text = "Processing error"
+                }
+            } finally {
+                connection?.disconnect()
             }
+        }.start()
+    }
 
-            val connection =
-                URL("$serverUrl/media/process").openConnection() as HttpURLConnection
+    private fun downloadProcessedVideo(
+        filename: String,
+        jobId: String
+    ): Uri? {
+        var connection: HttpURLConnection? = null
 
-            connection.requestMethod = "POST"
-            connection.doOutput = true
+        return try {
+            connection =
+                URL(
+                    "$serverUrl/media/download/${URLEncoder.encode(filename, "UTF-8")}"
+                ).openConnection() as HttpURLConnection
+
+            connection.requestMethod = "GET"
             connection.connectTimeout = 15000
             connection.readTimeout = 300000
-            connection.setRequestProperty(
-                "Content-Type",
-                "application/json"
-            )
-
-            val body =
-                "{\"filename\":${jsonEscape(filename)},\"message\":${jsonEscape(message)}}"
-
-            connection.outputStream.use {
-                it.write(body.toByteArray(Charsets.UTF_8))
-            }
 
             val code = connection.responseCode
 
-            val response =
-                if (code in 200..299) {
-                    connection.inputStream.bufferedReader().readText()
-                } else {
-                    connection.errorStream?.bufferedReader()?.readText()
-                        ?: "HTTP $code"
-                }
-
-            connection.disconnect()
-
-            runOnUiThread {
-                if (code in 200..299) {
-                    addMessage("Monu", "🎬 Media processing complete\n$response")
-                    status.text = "Processing completed"
-                } else {
-                    addMessage("Monu", "❌ Processing failed\n$response")
-                    status.text = "Processing failed"
-                }
+            if (code !in 200..299) {
+                return null
             }
-        } catch (e: Exception) {
-            runOnUiThread {
-                status.text = "Processing error: ${e.message ?: "failed"}"
+
+            val contentType =
+                connection.contentType ?: "video/mp4"
+
+            val resolver = contentResolver
+
+            val values = android.content.ContentValues().apply {
+                put(
+                    MediaStore.MediaColumns.DISPLAY_NAME,
+                    filename
+                )
+                put(
+                    MediaStore.MediaColumns.MIME_TYPE,
+                    contentType
+                )
+                put(
+                    MediaStore.MediaColumns.RELATIVE_PATH,
+                    "Download/MONU"
+                )
+                put(
+                    MediaStore.MediaColumns.IS_PENDING,
+                    1
+                )
+            }
+
+            val collection =
+                MediaStore.Files.getContentUri("external")
+
+            val uri = resolver.insert(
+                collection,
+                values
+            ) ?: return null
+
+            try {
+                resolver.openOutputStream(uri)?.use { output ->
+                    connection.inputStream.use { input ->
+                        val buffer = ByteArray(64 * 1024)
+
+                        while (true) {
+                            val count = input.read(buffer)
+
+                            if (count <= 0) {
+                                break
+                            }
+
+                            output.write(
+                                buffer,
+                                0,
+                                count
+                            )
+                        }
+
+                        output.flush()
+                    }
+                } ?: throw IllegalStateException(
+                    "Cannot open destination"
+                )
+
+                val downloadedBytes =
+                    resolver.openAssetFileDescriptor(
+                        uri,
+                        "r"
+                    )?.use { it.length }
+                        ?: -1L
+
+                if (downloadedBytes <= 0L) {
+                    resolver.delete(uri, null, null)
+                    return null
+                }
+
+                val completed =
+                    android.content.ContentValues().apply {
+                        put(
+                            MediaStore.MediaColumns.IS_PENDING,
+                            0
+                        )
+                    }
+
+                resolver.update(
+                    uri,
+                    completed,
+                    null,
+                    null
+                )
+
+                uri
+            } catch (e: Exception) {
+                resolver.delete(uri, null, null)
+                throw e
+            }
+
+        } catch (_: Exception) {
+            null
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    private fun addDownloadMessage(
+        title: String,
+        uri: Uri,
+        filename: String
+    ) {
+        addMessage(
+            "Monu",
+            "$title\n$filename\n\n✅ Real video saved to Download/MONU"
+        )
+
+        val downloadButton = TextView(this).apply {
+            text = "⬇️ Open / Download Cartoon Video"
+            textSize = 15f
+            setPadding(28, 20, 28, 20)
+            setTextColor(this@MainActivity.text)
+
+            setOnClickListener {
+                try {
+                    val intent =
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            uri
+                        ).apply {
+                            setDataAndType(
+                                uri,
+                                "video/mp4"
+                            )
+                            addFlags(
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        }
+
+                    startActivity(intent)
+                } catch (_: Exception) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "MONU: No video app available to open this file.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         }
+
+        chatContainer.addView(downloadButton)
     }
 
     private fun analyzeMessage(message: String) {
@@ -710,8 +948,11 @@ class MainActivity : Activity() {
                 val value = field.text.toString().trim().removeSuffix("/")
                 if (value.isNotEmpty()) {
                     serverUrl = value
+                    prefs.edit()
+                        .putString("server_url", serverUrl)
+                        .apply()
                     serverLabel.text = "Server: $serverUrl"
-                    status.text = "Server URL updated"
+                    status.text = "Server URL saved"
                 }
             }
             .show()

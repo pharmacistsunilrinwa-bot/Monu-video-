@@ -2,6 +2,7 @@ from pathlib import Path
 import uuid
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.database.db import connect
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/media", tags=["media"])
 ROOT = Path(__file__).resolve().parents[2]
 UPLOADS = ROOT / "data" / "uploads"
 FINAL = ROOT / "data" / "final"
+FINAL.mkdir(parents=True, exist_ok=True)
 
 
 class ProcessRequest(BaseModel):
@@ -118,12 +120,23 @@ def process_media(request: ProcessRequest):
 
         update_job(job_id, "completed", 100, str(output))
 
+        output_size = output.stat().st_size
+
+        if output_size <= 0:
+            update_job(job_id, "failed", 0, str(output))
+            raise HTTPException(
+                status_code=500,
+                detail="Processed output is empty",
+            )
+
         return {
             "ok": True,
             "job_id": job_id,
             "status": "completed",
             "input": str(source),
             "output": str(output),
+            "output_filename": output.name,
+            "output_size_bytes": output_size,
             "cartoon": cartoon,
             "duration": duration,
             "chunks": len(chunks),
@@ -135,3 +148,39 @@ def process_media(request: ProcessRequest):
     except Exception as exc:
         update_job(job_id, "failed", 0)
         raise HTTPException(status_code=500, detail=str(exc))
+
+@router.get("/download/{filename}")
+def download_processed_media(filename: str):
+    safe_name = Path(filename).name
+
+    if safe_name != filename or not safe_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid output filename"
+        )
+
+    target = FINAL / safe_name
+
+    if not target.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Processed file not found"
+        )
+
+    if not target.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Processed file is not a regular file"
+        )
+
+    if target.stat().st_size <= 0:
+        raise HTTPException(
+            status_code=500,
+            detail="Processed file is empty"
+        )
+
+    return FileResponse(
+        path=target,
+        media_type="video/mp4",
+        filename=safe_name
+    )

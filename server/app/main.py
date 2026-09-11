@@ -11,11 +11,13 @@ from app.brain.monu_brain import MonuBrain
 from app.api.process import router as process_router
 
 from app.database.db import initialize
+from app.api.upload import router as upload_router
 
 app = FastAPI(
     title="Monu Video AI",
     version="1.0.0"
 )
+app.include_router(upload_router)
 
 brain = MonuBrain()
 
