@@ -6,14 +6,17 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.speech.RecognizerIntent
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.*
+import androidx.core.content.FileProvider
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import org.json.JSONObject
 
 class MainActivity : Activity() {
 
@@ -29,6 +32,7 @@ class MainActivity : Activity() {
     }
 
     private var selectedFile: Uri? = null
+    private var cameraUri: Uri? = null
     private var serverUrl = "http://127.0.0.1:8000"
 
     private val bg = Color.rgb(9, 10, 18)
@@ -161,7 +165,7 @@ class MainActivity : Activity() {
         }
 
         val attach = actionButton("＋", purple) {
-            chooseFile()
+            showMediaMenu(attach)
         }
 
         val voice = actionButton("🎙", green) {
@@ -370,6 +374,80 @@ class MainActivity : Activity() {
         startActivityForResult(intent, 1001)
     }
 
+    private fun showMediaMenu(anchor: View) {
+        val options = arrayOf(
+            "📷 Camera",
+            "🖼 Photo",
+            "🎥 Video",
+            "📄 File"
+        )
+
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Add to MONU")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> openCamera()
+                    1 -> chooseMedia("image/*")
+                    2 -> chooseMedia("video/*")
+                    3 -> chooseMedia("*/*")
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun chooseMedia(type: String) {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            this.type = type
+            addCategory(Intent.CATEGORY_OPENABLE)
+
+            if (type == "*/*") {
+                putExtra(
+                    Intent.EXTRA_MIME_TYPES,
+                    arrayOf(
+                        "image/*",
+                        "video/*",
+                        "application/pdf",
+                        "text/*"
+                    )
+                )
+            }
+        }
+
+        startActivityForResult(intent, 1001)
+    }
+
+    private fun openCamera() {
+        try {
+            val photoFile = java.io.File.createTempFile(
+                "MONU_CAMERA_",
+                ".jpg",
+                cacheDir
+            )
+
+            cameraUri = FileProvider.getUriForFile(
+                this,
+                "${packageName}.fileprovider",
+                photoFile
+            )
+
+            val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                putExtra(MediaStore.EXTRA_OUTPUT, cameraUri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            }
+
+            startActivityForResult(intent, 1003)
+        } catch (e: Exception) {
+            cameraUri = null
+            Toast.makeText(
+                this,
+                "MONU: Camera unavailable: ${e.message}",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
     private fun sendMessage() {
         val message = input.text.toString().trim()
         val file = selectedFile
@@ -379,114 +457,135 @@ class MainActivity : Activity() {
             return
         }
 
-        val shown = if (message.isEmpty()) {
-            if (file != null) {
-                "📎 ${getFileName(file)}"
-            } else {
-                "Media command"
-            }
-        } else {
-            if (file != null) {
-                "📎 ${getFileName(file)}\n$message"
-            } else {
-                message
-            }
+        input.setText("")
+
+        if (file == null) {
+            addMessage("You", message)
+            saveHistory(message)
+            status.text = "Sending to MONU..."
+
+            Thread {
+                analyzeMessage(message)
+            }.start()
+
+            return
         }
 
-        addMessage("You", shown)
-        saveHistory(shown)
-
-        input.setText("")
-        selectedFile = null
-
-        status.text = "Sending to MONU..."
+        status.text = "Uploading media..."
 
         Thread {
-            if (file != null) {
-                val uploaded = uploadFile(file)
+            val uploaded = uploadFile(file)
 
-                if (uploaded != null) {
-                    processMedia(uploaded, message)
-                } else {
-                    runOnUiThread {
-                        status.text = "Upload failed"
-                    }
+            if (uploaded == null) {
+                runOnUiThread {
+                    status.text = "Upload failed — media was NOT sent"
+                    Toast.makeText(
+                        this,
+                        "MONU: Upload failed. The media was not sent.",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
-            } else {
-                analyzeMessage(message)
+                return@Thread
             }
+
+            val name = getFileName(file)
+            val shown = if (message.isEmpty()) {
+                "📎 $name"
+            } else {
+                "📎 $name\n$message"
+            }
+
+            runOnUiThread {
+                addMessage("You", shown)
+                saveHistory(shown)
+                selectedFile = null
+                selectedLabel.text = "No media selected"
+                status.text = "Media uploaded — processing..."
+            }
+
+            processMedia(uploaded, message)
         }.start()
     }
 
     private fun uploadFile(uri: Uri): String? {
+        var connection: HttpURLConnection? = null
+
         return try {
             val name = getFileName(uri)
-            val boundary = "MONU_${System.currentTimeMillis()}"
+            val mime = contentResolver.getType(uri)
+                ?: "application/octet-stream"
 
-            val connection =
-                URL("$serverUrl/upload").openConnection() as HttpURLConnection
+            val boundary = "----MONU${System.currentTimeMillis()}"
+            val url = URL("$serverUrl/upload")
 
+            connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.doOutput = true
+            connection.useCaches = false
             connection.connectTimeout = 15000
             connection.readTimeout = 120000
+
             connection.setRequestProperty(
                 "Content-Type",
                 "multipart/form-data; boundary=$boundary"
             )
 
-            val output = connection.outputStream
-            val writer = output.bufferedWriter()
+            connection.outputStream.use { output ->
+                fun writeText(value: String) {
+                    output.write(value.toByteArray(Charsets.UTF_8))
+                }
 
-            writer.write("--$boundary\r\n")
-            writer.write(
-                "Content-Disposition: form-data; name=\"file\"; filename=\"$name\"\r\n"
-            )
-            writer.write("Content-Type: application/octet-stream\r\n\r\n")
-            writer.flush()
+                writeText("--$boundary\r\n")
+                writeText(
+                    "Content-Disposition: form-data; name=\"file\"; filename=\"$name\"\r\n"
+                )
+                writeText("Content-Type: $mime\r\n")
+                writeText("Content-Transfer-Encoding: binary\r\n\r\n")
 
-            val inputStream = contentResolver.openInputStream(uri)
-                ?: return null
+                val inputStream = contentResolver.openInputStream(uri)
+                    ?: throw IllegalStateException("Unable to read selected media")
 
-            inputStream.use { stream ->
-                stream.copyTo(output)
+                inputStream.use { stream ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val count = stream.read(buffer)
+                        if (count <= 0) break
+                        output.write(buffer, 0, count)
+                    }
+                }
+
+                writeText("\r\n--$boundary--\r\n")
+                output.flush()
             }
-
-            output.flush()
-
-            writer.write("\r\n--$boundary--\r\n")
-            writer.flush()
-            writer.close()
 
             val code = connection.responseCode
 
             val response =
                 if (code in 200..299) {
-                    connection.inputStream.bufferedReader().readText()
+                    connection.inputStream.bufferedReader().use { it.readText() }
                 } else {
-                    ""
+                    connection.errorStream
+                        ?.bufferedReader()
+                        ?.use { it.readText() }
+                        ?: "HTTP $code"
                 }
 
-            connection.disconnect()
+            if (code !in 200..299) {
+                return null
+            }
 
-            if (code !in 200..299) return null
+            val json = JSONObject(response)
+            val filename = json.optString("filename", "")
 
-            val marker = "\"filename\""
-            val markerIndex = response.indexOf(marker)
-
-            if (markerIndex < 0) return null
-
-            val colon = response.indexOf(":", markerIndex)
-            val firstQuote = response.indexOf('"', colon + 1)
-            val secondQuote = response.indexOf('"', firstQuote + 1)
-
-            if (firstQuote >= 0 && secondQuote > firstQuote) {
-                response.substring(firstQuote + 1, secondQuote)
-            } else {
+            if (filename.isBlank()) {
                 null
+            } else {
+                filename
             }
         } catch (e: Exception) {
             null
+        } finally {
+            connection?.disconnect()
         }
     }
 
@@ -656,15 +755,15 @@ class MainActivity : Activity() {
     ) {
         super.onActivityResult(requestCode, resultCode, data)
 
-        if (requestCode == 1001 && resultCode == RESULT_OK) {
-            val uri = data?.data
-
-            if (uri == null) {
+        if (requestCode == 1001) {
+            if (resultCode != RESULT_OK || data?.data == null) {
                 selectedFile = null
                 selectedLabel.text = "No media selected"
-                status.text = "Selection cancelled"
+                status.text = "Media selection cancelled"
                 return
             }
+
+            val uri = data.data!!
 
             selectedFile = uri
 
@@ -674,27 +773,62 @@ class MainActivity : Activity() {
                     Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             } catch (_: Exception) {
-                // Some providers do not support persistable permissions.
+                // Provider does not support persistable permission.
             }
 
             val name = getFileName(uri)
+            val mime = contentResolver.getType(uri) ?: "unknown"
+
             selectedLabel.text = "📎 $name"
-            status.text = "Media selected — press ➤"
+            status.text = "Media selected ($mime) — press ➤"
+            return
         }
 
-        if (requestCode == 1002 && resultCode == RESULT_OK && data != null) {
-            val results =
-                data.getStringArrayListExtra(
-                    RecognizerIntent.EXTRA_RESULTS
-                )
+        if (requestCode == 1002 &&
+            resultCode == RESULT_OK &&
+            data != null
+        ) {
+            val results = data.getStringArrayListExtra(
+                RecognizerIntent.EXTRA_RESULTS
+            )
 
             if (!results.isNullOrEmpty()) {
                 input.setText(results[0])
                 input.setSelection(input.length())
                 status.text = "Voice command captured"
             }
+            return
         }
-    }
+
+        if (requestCode == 1003) {
+            if (resultCode != RESULT_OK || cameraUri == null) {
+                cameraUri = null
+                selectedFile = null
+                selectedLabel.text = "No media selected"
+                status.text = "Camera cancelled"
+                return
+            }
+
+            val uri = cameraUri
+            if (uri == null) {
+                status.text = "Camera URI unavailable"
+                return
+            }
+
+            try {
+                val name = getFileName(uri)
+
+                selectedFile = uri
+                selectedLabel.text = "📷 $name"
+                status.text = "Camera photo ready — press ➤"
+            } catch (e: Exception) {
+                cameraUri = null
+                selectedFile = null
+                selectedLabel.text = "No media selected"
+                status.text = "Camera result failed"
+            }
+            return
+        }
 
     private fun getFileName(uri: Uri): String {
         var name: String? = null
