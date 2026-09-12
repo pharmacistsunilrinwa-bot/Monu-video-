@@ -33,7 +33,7 @@ class MainActivity : Activity() {
 
     private var selectedFile: Uri? = null
     private var cameraUri: Uri? = null
-    private var serverUrl = "http://127.0.0.1:8000"
+    private var serverUrl = "https://22f574f5-8ffe-42b5-81f3-2400c24928de-00-1ttxdzfgg8d8r.sisko.replit.dev"
 
     private val bg = Color.rgb(9, 10, 18)
     private val panel = Color.rgb(18, 20, 31)
@@ -49,8 +49,8 @@ class MainActivity : Activity() {
 
         serverUrl = prefs.getString(
             "server_url",
-            "http://127.0.0.1:8000"
-        ) ?: "http://127.0.0.1:8000"
+            "https://22f574f5-8ffe-42b5-81f3-2400c24928de-00-1ttxdzfgg8d8r.sisko.replit.dev"
+        ) ?: "https://22f574f5-8ffe-42b5-81f3-2400c24928de-00-1ttxdzfgg8d8r.sisko.replit.dev"
 
         loadHistory()
         buildUi()
@@ -495,10 +495,13 @@ class MainActivity : Activity() {
             }
 
             val name = getFileName(file)
+            val mime = contentResolver.getType(file)
+                ?: "application/octet-stream"
+
             val shown = if (message.isEmpty()) {
                 "📎 $name"
             } else {
-                "📎 $name\n$message"
+                "📎 $name\\n$message"
             }
 
             runOnUiThread {
@@ -506,11 +509,18 @@ class MainActivity : Activity() {
                 saveHistory(shown)
                 selectedFile = null
                 selectedLabel.text = "No media selected"
-                status.text = "Media uploaded — processing..."
+                status.text = "Attachment uploaded successfully"
+
+                Toast.makeText(
+                    this,
+                    "MONU: $name uploaded successfully.",
+                    Toast.LENGTH_LONG
+                ).show()
             }
 
-            processMedia(uploaded, message)
-        }.start()
+            if (mime.startsWith("video/")) {
+                processMedia(uploaded, message)
+            }        }.start()
     }
 
     private fun uploadFile(uri: Uri): String? {
